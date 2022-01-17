@@ -1,0 +1,182 @@
+---
+title: "Combined_R_code"
+output: html_document
+author: 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+Data Correlation and Visualization
+```{r}
+install.packages(c("tidyverse", "rayshader", "weathermetrics", "PerformanceAnalytics", "lubridate", "corrplot", "ggpubr", "raster", "move", "rasterVis", "googlesheets4", "here"))
+
+library(ggplot2)
+library(tidyverse)
+# library(rayshader)
+library(weathermetrics)
+library(PerformanceAnalytics)
+library(lubridate)
+library(corrplot)
+library(ggpubr)
+# library(move)
+# library(raster)
+# library(rasterVis)
+library(googlesheets4)
+library(here)
+```
+
+#### Load in data and clean data
+```{r}
+path <- here("OHW_development/data_outputs")
+here(path)
+tracks <- read_csv(here(path,"144020_alldata_matched.csv"))
+# tracks <- read_csv(file.choose())
+
+#assign sharkIDs if needed  
+tracks$sharkid = 144020
+
+# see data columns
+head(tracks)
+
+#change timestamp to posix
+tracks$timestamp <- as.POSIXct(tracks$datetime, tz = "GMT")
+
+#convert temperature
+tracks$analysed_sst <- kelvin.to.celsius(tracks$analysed_sst)
+
+#create new columns with month and years
+tracks <- tracks %>% mutate(month = month(timestamp), year=year(timestamp))
+
+#assign season to data
+tracks <- tracks %>% mutate(season=ifelse(month %in% c(6,7,8,9,10), "wet","dry"))
+```
+
+
+#### Visualizing correlations
+```{r, Correlation code}
+
+#generate frequencies of all numerical variables
+tracks %>%
+  keep(is.numeric) %>%
+  gather() %>%
+  ggplot(aes(value)) +
+  facet_wrap(~key, scales = "free") +
+  geom_histogram(bins = 40)
+
+#Each significance level is associated to a symbol :
+#p-values(0, 0.001, 0.01, 0.05, 0.1, 1) <=> symbols(“***”, “**”, “*”, “.”, " “)
+#could be used to determine significant collinearity between variables
+#or to pinpoint patterns to explore further
+numshark <- dplyr::select_if(tracks, is.numeric)
+chart.Correlation(numshark, histogram=TRUE, pch=19)
+
+```
+
+```{r, Brunas corr code}
+#correlation
+cor(tracks[,c(2,3,5:12)], method = 'spearman') # OU method = 'spearman'
+plot(tracks[,c(2,3,5:12)], col = 1, pch = 19)
+
+library(corrplot)
+corrplot(cor(tracks[,c(2,3,5:12),], method ='pearson'), type = "lower",
+         method = c("number"), tl.col = "black", number.digits = 1)
+
+# Nonmetric MDS
+# N rows (objects) x p columns (variables)
+# each row identified by a unique row name
+
+tracks.z <- scale(tracks[, c(2,3,5:12)])    #matrix standardization
+
+d <- dist(tracks.z) # euclidean distances between the rows
+mds <- cmdscale(d,eig=TRUE, k=2) # k is the number of dim
+mds # view results
+
+mds <- tracks.z %>%
+  dist() %>%          
+  cmdscale() %>%
+  as_tibble()
+
+mds
+
+# Plot MDS
+
+x <- fit$points[,1]
+y <- fit$points[,2]
+plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2",
+     main="Nonmetric MDS", type="n")
+text(x, y, labels = row.names(tracks), cex=.7)
+
+#group
+clust <- kmeans(mds, 3)$cluster %>%
+  as.factor()
+
+mds <- mds %>%
+  mutate(groups = clust)
+
+mds
+
+plot(x, y, xlab="Coordinate 1", ylab="Coordinate 2",
+     main="nMDS", type="n")
+text(x, y, labels = row.names(tracks), cex=.7)
+
+devtools::install_github("tidyverse/ggplot2")
+
+library(ggpubr)
+library(tidyverse)
+
+ggscatter(mds, x = "Dim.1", y = "Dim.2",    # group plot
+          label = rownames(tracks[,c(2,3,5:12)]),
+          color = "groups",
+          palette = "jco",
+          size = 1, 
+          ellipse = TRUE,
+          ellipse.type = "convex",
+          repel = FALSE)
+
+```
+
+#### Plots
+```{r}
+tracks %>% ggplot(., aes(x=as.factor(month), y=lat, color = season))+geom_boxplot()+
+#boxplots over months/seasons by shark ID
+  theme_bw() + facet_grid(~sharkid)
+
+tracks %>% ggplot(., aes(x=as.factor(month),y=analysed_sst, color = season))+geom_boxplot()+
+  theme_bw() + facet_grid(~sharkid) + theme_bw()
+
+tracks %>% ggplot(., aes(x=as.factor(month),y=mag, color = season))+geom_boxplot()+
+  theme_bw() + facet_wrap(~sharkid) + theme_bw()
+
+tracks %>% ggplot(., aes(x=as.factor(month),y=sla, color = season))+geom_boxplot()+
+  theme_bw() + facet_wrap(~sharkid) + theme_bw()
+
+tracks %>% ggplot(., aes(x=as.factor(month),y=EKE, color = season))+geom_boxplot()+
+  theme_bw() + facet_wrap(~sharkid) + theme_bw()
+
+tracks %>% ggplot(., aes(x=as.factor(month),y=sla, color = season))+geom_boxplot()+
+  theme_bw() +facet_wrap(~sharkid) + theme_bw()
+
+hist(tracks$month)
+
+#individual point plots to compare
+
+g1 <- ggplot(tracks, aes(x=timestamp, y=EKE, color=season)) +
+  geom_point()+ geom_smooth() + facet_grid(~sharkid, scales = "free") + theme_bw()
+
+g2 <- ggplot(tracks, aes(x=timestamp, y=analysed_sst, color=season, group=sharkid))+
+  geom_point()+geom_smooth() + facet_grid(~sharkid, scales = "free") + theme_bw()
+
+g3 <- ggplot(tracks, aes(x=timestamp, y=lat, color=season, group=sharkid))+
+  geom_point()+geom_smooth() + facet_grid(~sharkid, scales = "free") + theme_bw()
+
+
+#Arrange a paneled figure for comparisons among sharks and variables
+figure <- ggarrange(g3, g2, g1,
+                    labels = c("A", "B", "C"),
+                    ncol = 2, nrow = 2)
+figure
+```

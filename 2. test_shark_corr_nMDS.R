@@ -1,7 +1,22 @@
-setwd("C:/Users/ramos/Downloads")
+install.packages(c("tidyverse", "rayshader", "weathermetrics", "PerformanceAnalytics", "lubridate", "corrplot", "ggpubr", "raster", "move", "rasterVis", "googlesheets4", "here"))
 
-df <- read.csv("ssh_matched_3years_mag.csv", 
-               header = TRUE, sep = ",")
+library(ggplot2)
+library(tidyverse)
+# library(rayshader)
+library(weathermetrics)
+library(PerformanceAnalytics)
+library(lubridate)
+library(corrplot)
+library(ggpubr)
+# library(move)
+# library(raster)
+# library(rasterVis)
+library(googlesheets4)
+library(here)
+
+path <- here("OHW21_proj_tag_data", "OHW_development/data outputs")
+here(path)
+df <- read.csv(here(path,"ssh_matched_3years_mag.csv"), header = TRUE, sep = ",")
 
 
 as.data.frame(df)
